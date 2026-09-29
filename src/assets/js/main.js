@@ -11,13 +11,6 @@ const lenis = new Lenis({
     wheelMultiplier: 0.85,
 });
 
-function raf(time) {
-    lenis.raf(time);
-    requestAnimationFrame(raf);
-}
-
-requestAnimationFrame(raf);
-
 lenis.on("scroll", ScrollTrigger.update);
 
 /* GSAP + Lenis sync */
@@ -273,6 +266,44 @@ gsap.to(introSplit.words, {
 });
 
 /* ================================================= */
+/* SHARED GALLERY HOVER STATE */
+/* ================================================= */
+
+let activeCard = null;
+let leaveTimer = null;
+
+const hoverStates = new WeakMap();
+
+function getHoverState(card) {
+    if (!hoverStates.has(card)) {
+        hoverStates.set(card, {
+            timeline: null,
+            leaving: false,
+        });
+    }
+
+    return hoverStates.get(card);
+}
+
+function cancelLeave() {
+    if (leaveTimer) {
+        clearTimeout(leaveTimer);
+        leaveTimer = null;
+    }
+}
+
+function killHoverTimeline(card) {
+    if (!card) return;
+
+    const state = getHoverState(card);
+
+    if (state.timeline) {
+        state.timeline.kill();
+        state.timeline = null;
+    }
+}
+
+/* ================================================= */
 /* GALLERY CARDS */
 /* ================================================= */
 
@@ -281,6 +312,8 @@ galleryRows.forEach((row, index) => {
 
     const frame = card.querySelector(".image-frame");
     const imageWrap = card.querySelector(".image-wrap");
+    const imageHover = card.querySelector(".image-hover");
+
     const image = card.querySelector("img");
     const glow = card.querySelector(".image-glow");
     const scan = card.querySelector(".image-scan");
@@ -288,8 +321,6 @@ galleryRows.forEach((row, index) => {
     const title = card.querySelector(".card-title h2");
     const kicker = card.querySelector(".title-kicker");
     const description = card.querySelector(".card-description");
-
-    const number = row.dataset.index;
 
     const originalRotation = row.classList.contains("gallery-row-right")
         ? 1.25
@@ -446,18 +477,65 @@ galleryRows.forEach((row, index) => {
         },
     });
 
+    /* ================================================= */
+    /* HOVER STATE */
+    /* ================================================= */
+
+    let hoverTimeline = null;
+    let pointerInside = false;
+
+    /* --------------------------------------------- */
+    /* INITIAL HOVER STATE */
+    /* --------------------------------------------- */
+
+    gsap.set(imageHover, {
+        clipPath: "inset(9% 9% 9% 9% round 0.8rem)",
+    });
+
+    gsap.set(image, {
+        scale: 1.16,
+    });
+
+    gsap.set(glow, {
+        opacity: 0,
+        scale: 0.7,
+    });
+
+    gsap.set(scan, {
+        opacity: 0,
+        yPercent: -120,
+    });
+
+    gsap.set(title, {
+        x: 0,
+    });
+
     /* --------------------------------------------- */
     /* HOVER IN */
     /* --------------------------------------------- */
 
-    card.addEventListener("mouseenter", () => {
-        gsap.killTweensOf([image, imageWrap, frame, glow, scan, title]);
+    card.addEventListener("pointerenter", () => {
+        if (!window.matchMedia("(hover: hover)").matches) return;
 
-        const hover = gsap.timeline();
+        pointerInside = true;
 
-        hover
+        if (hoverTimeline) {
+            hoverTimeline.kill();
+        }
+
+        hoverTimeline = gsap.timeline({
+            defaults: {
+                overwrite: "auto",
+            },
+        });
+
+        hoverTimeline
+            /* ---------------------------------- */
+            /* IMAGE CLIP REVEAL */
+            /* ---------------------------------- */
+
             .to(
-                imageWrap,
+                imageHover,
                 {
                     clipPath: "inset(0% 0% 0% 0% round 0.2rem)",
                     duration: 1.1,
@@ -465,61 +543,91 @@ galleryRows.forEach((row, index) => {
                 },
                 0,
             )
+
+            /* ---------------------------------- */
+            /* IMAGE SCALE */
+            /* ---------------------------------- */
+
             .to(
                 image,
                 {
-                    scale: 1.035,
-                    duration: 1.4,
+                    scale: 1.06,
+                    filter: "saturate(0.9) contrast(1) sepia(0.03)",
+                    duration: 1.15,
                     ease: "power3.out",
                 },
                 0,
             )
-            .to(
-                frame,
-                {
-                    rotation: 0,
-                    y: -12,
-                    duration: 1,
-                    ease: "power3.out",
-                },
-                0,
-            )
+
+            /* ---------------------------------- */
+            /* GOLD GLOW */
+            /* ---------------------------------- */
+
             .to(
                 glow,
                 {
-                    opacity: 0.8,
-                    scale: 1.1,
-                    duration: 1,
+                    opacity: 0.55,
+                    scale: 1,
+                    duration: 0.9,
                     ease: "power3.out",
                 },
-                0,
+                0.05,
             )
-            .to(
+
+            /* ---------------------------------- */
+            /* SCAN LINE */
+            /* ---------------------------------- */
+
+            .fromTo(
                 scan,
                 {
-                    opacity: 0.5,
-                    yPercent: 220,
-                    duration: 1.5,
+                    yPercent: -120,
+                    opacity: 0,
+                },
+                {
+                    yPercent: 120,
+                    opacity: 0.75,
+                    duration: 1.25,
                     ease: "power2.inOut",
                 },
                 0.1,
             )
+
+            /* fade scan back out */
+            .to(
+                scan,
+                {
+                    opacity: 0,
+                    duration: 0.35,
+                    ease: "power2.out",
+                },
+                1.0,
+            )
+
+            /* ---------------------------------- */
+            /* TITLE */
+            /* ---------------------------------- */
+
             .to(
                 title,
                 {
                     x: 8,
-                    duration: 0.8,
+                    duration: 0.65,
                     ease: "power3.out",
                 },
-                0,
+                0.15,
             );
 
-        /* cursor glow */
+        /* ---------------------------------- */
+        /* CURSOR */
+        /* ---------------------------------- */
 
         gsap.to(cursor, {
-            scale: 1.5,
+            scale: 1.45,
             opacity: 1,
-            duration: 0.5,
+            duration: 0.35,
+            ease: "power3.out",
+            overwrite: true,
         });
     });
 
@@ -527,82 +635,117 @@ galleryRows.forEach((row, index) => {
     /* HOVER OUT */
     /* --------------------------------------------- */
 
-    card.addEventListener("mouseleave", () => {
-        gsap.killTweensOf([image, imageWrap, frame, glow, scan, title]);
+    card.addEventListener("pointerleave", () => {
+        if (!window.matchMedia("(hover: hover)").matches) return;
 
-        const hoverOut = gsap.timeline();
+        pointerInside = false;
 
-        hoverOut
+        if (hoverTimeline) {
+            hoverTimeline.kill();
+        }
+
+        hoverTimeline = gsap.timeline({
+            defaults: {
+                overwrite: "auto",
+            },
+            onComplete: () => {
+                hoverTimeline = null;
+            },
+        });
+
+        hoverTimeline
+            /* ---------------------------------- */
+            /* IMAGE CLIP CLOSE */
+            /* ---------------------------------- */
+
             .to(
-                imageWrap,
+                imageHover,
                 {
-                    clipPath: "inset(7% 7% 7% 7% round 0.8rem)",
-                    duration: 0.9,
+                    clipPath: "inset(9% 9% 9% 9% round 0.8rem)",
+                    duration: 0.8,
                     ease: "power3.inOut",
                 },
                 0,
             )
+
+            /* ---------------------------------- */
+            /* IMAGE SCALE RESET */
+            /* ---------------------------------- */
+
             .to(
                 image,
                 {
-                    scale: 1.12,
-                    xPercent: 0,
-                    yPercent: 0,
-                    duration: 1,
-                    ease: "power3.inOut",
-                },
-                0,
-            )
-            .to(
-                frame,
-                {
-                    rotation: originalRotation,
-                    y: 0,
+                    scale: 1.16,
+                    filter: "saturate(0.68) contrast(0.92) sepia(0.08)",
                     duration: 0.9,
                     ease: "power3.inOut",
                 },
                 0,
             )
+
+            /* ---------------------------------- */
+            /* GLOW OUT */
+            /* ---------------------------------- */
+
             .to(
                 glow,
                 {
                     opacity: 0,
                     scale: 0.7,
-                    duration: 0.7,
+                    duration: 0.5,
                     ease: "power3.inOut",
                 },
                 0,
             )
+
+            /* ---------------------------------- */
+            /* SCAN RESET */
+            /* ---------------------------------- */
+
             .to(
                 scan,
                 {
                     opacity: 0,
                     yPercent: -120,
-                    duration: 0.5,
+                    duration: 0.4,
+                    ease: "power2.out",
                 },
                 0,
             )
+
+            /* ---------------------------------- */
+            /* TITLE RESET */
+            /* ---------------------------------- */
+
             .to(
                 title,
                 {
                     x: 0,
-                    duration: 0.7,
+                    duration: 0.5,
                     ease: "power3.out",
                 },
                 0,
             );
 
+        /* ---------------------------------- */
+        /* CURSOR RESET */
+        /* ---------------------------------- */
+
         gsap.to(cursor, {
             scale: 1,
-            duration: 0.5,
+            duration: 0.3,
+            ease: "power3.out",
+            overwrite: true,
         });
     });
 
     /* --------------------------------------------- */
-    /* MOUSE PARALLAX */
+    /* IMAGE MICRO PARALLAX */
     /* --------------------------------------------- */
 
-    card.addEventListener("mousemove", (event) => {
+    card.addEventListener("pointermove", (event) => {
+        if (!pointerInside) return;
+
         const rect = card.getBoundingClientRect();
 
         const x = (event.clientX - rect.left) / rect.width - 0.5;
@@ -610,8 +753,22 @@ galleryRows.forEach((row, index) => {
         const y = (event.clientY - rect.top) / rect.height - 0.5;
 
         gsap.to(image, {
-            x: x * 16,
-            y: y * 16,
+            x: x * 12,
+            y: y * 8,
+            duration: 0.6,
+            ease: "power3.out",
+            overwrite: "auto",
+        });
+    });
+
+    /* --------------------------------------------- */
+    /* RESET IMAGE POSITION */
+    /* --------------------------------------------- */
+
+    card.addEventListener("pointerleave", () => {
+        gsap.to(image, {
+            x: 0,
+            y: 0,
             duration: 0.7,
             ease: "power3.out",
             overwrite: "auto",
@@ -746,5 +903,10 @@ gsap.to(".outro-center", {
 /* ================================================= */
 
 window.addEventListener("load", () => {
+    ScrollTrigger.refresh();
+});
+
+window.addEventListener("resize", () => {
+    location.reload();
     ScrollTrigger.refresh();
 });
